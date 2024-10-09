@@ -1,18 +1,35 @@
-name: GitHub Actions Demo
+name: Deploy to main
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
-on: [push]
+on:
+  push:
+    branches:
+      - main
 jobs:
   Explore-GitHub-Actions:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
-      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
-      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-      - name: Check out repository code
-        uses: actions/checkout@v4
-      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
-      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
-      - name: List files in the repository
-        run: |
-          ls ${{ github.workspace }}
-      - run: echo "🍏 This job's status is ${{ job.status }}."
+
+    - name: Checkout source code
+      uses: actions/checkout@v2
+
+    - name: Deploy to Server
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+        HOST: ${{ secrets.DEPLOY_HOST }}
+      run: |
+        echo "$SSH_PRIVATE_KEY" > private_key.pem
+        chmod 600 private_key.pem
+        ssh -i private_key.pem -o StrictHostKeyChecking=no $USERNAME@$HOST << EOF
+          mkdir -p /home/$USERNAME/app
+          pkill -f "python3 madlibs.py" || true
+        EOF
+        scp -i private_key.pem -o StrictHostKeyChecking=no -r ./* $USERNAME@$HOST:/home/$USERNAME/app
+        ssh -i private_key.pem -o StrictHostKeyChecking=no $USERNAME@$HOST << EOF
+          cd /home/$USERNAME/app
+          python3 -m pip install flask
+          nohup python3 madlibs.py >> app.log 2>&1 &
+          disown
+        EOF
+        
+
